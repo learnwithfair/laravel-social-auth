@@ -1,4 +1,5 @@
 <?php
+
 namespace Learnwithfair\SocialAuth\Commands;
 
 use Illuminate\Console\Command;
@@ -138,8 +139,17 @@ class InstallCommand extends Command
         $this->line('');
         $this->line('  3. Ensure Laravel Sanctum is installed and configured.');
         $this->line('');
-        $this->line('  4. Register the SocialiteProviders event listener in');
-        $this->line('     App\\Providers\\AppServiceProvider (see README).');
+
+        $laravelVersion = (int) app()->version();
+
+        if ($laravelVersion < 11) {
+            $this->line('  4. (Laravel 10 only) Register the SocialiteProviders event listener');
+            $this->line('     in App\\Providers\\AppServiceProvider — see README for the code.');
+        } else {
+            $this->line('  4. (Laravel 11+) No event listener registration required.');
+            $this->line('     SocialiteProviders v5+ registers itself automatically.');
+        }
+
         $this->line('');
         $this->line('  5. Add the route to routes/api.php or use the package route');
         $this->line('     that is loaded automatically at POST /api/social-login.');

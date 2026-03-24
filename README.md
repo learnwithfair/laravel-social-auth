@@ -51,9 +51,11 @@ REDIRECT_URI=
 php artisan migrate
 ```
 
-**Step 5 — Register the SocialiteProviders event listener.**
+**Step 5 — Register the SocialiteProviders event listener (Laravel 10 only).**
 
-Open `app/Providers/AppServiceProvider.php` and add the following inside the `boot` method:
+Laravel 11 and above: this step is not required. SocialiteProviders v5+ registers itself automatically.
+
+Laravel 10 only: open `app/Providers/AppServiceProvider.php` and add the following inside the `boot` method:
 
 ```php
 use SocialiteProviders\Manager\SocialiteWasCalled;
