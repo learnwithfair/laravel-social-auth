@@ -3,6 +3,7 @@ namespace RahatulRabbi\SocialAuth;
 
 use Illuminate\Support\ServiceProvider;
 use RahatulRabbi\SocialAuth\Commands\InstallCommand;
+use RahatulRabbi\SocialAuth\Commands\UninstallCommand;
 
 class SocialAuthServiceProvider extends ServiceProvider
 {
@@ -37,6 +38,7 @@ class SocialAuthServiceProvider extends ServiceProvider
     {
         $this->commands([
             InstallCommand::class,
+            UninstallCommand::class,
         ]);
     }
 

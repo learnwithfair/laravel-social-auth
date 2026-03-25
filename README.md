@@ -304,6 +304,50 @@ php artisan vendor:publish --tag=social-auth-migrations
 
 ---
 
+## Uninstalling
+
+Always run the uninstall command **before** `composer remove`. Composer only removes the package from `vendor/` — it has no knowledge of the config, controller, migration, or `.env` keys that were published into your application. The uninstall command handles all of that.
+
+**Step 1 — Clean up published files and database columns:**
+
+```bash
+php artisan social-auth:uninstall
+```
+
+You will be shown a summary of what will be removed and asked to confirm. The command will:
+
+- Delete `config/social-auth.php`
+- Delete `app/Http/Controllers/Api/Auth/SocialAuthController.php`
+- Delete the published migration file from `database/migrations/`
+- Roll back the migration, dropping all social auth columns from `users`
+- Remove the social auth key block from `.env`
+- Remove `app/Http/Controllers/Api/Auth/` if it is left empty
+
+If your `SocialAuthController.php` contains custom code, you will be prompted separately before that file is deleted.
+
+**Step 2 — Remove the package via Composer:**
+
+```bash
+composer remove rahatulrabbi/laravel-social-auth
+```
+
+**Available flags:**
+
+| Flag | Effect |
+|---|---|
+| `--force` | Skip all confirmation prompts |
+| `--skip-migration` | Keep the database columns, do not roll back |
+| `--skip-env` | Leave the `.env` keys in place |
+
+**Non-interactive uninstall (CI environments):**
+
+```bash
+php artisan social-auth:uninstall --force
+composer remove rahatulrabbi/laravel-social-auth
+```
+
+---
+
 ## Common Errors
 
 **`Invalid ID token audience`**
