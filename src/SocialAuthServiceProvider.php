@@ -1,8 +1,8 @@
 <?php
-namespace Learnwithfair\SocialAuth;
+namespace RahatulRabbi\SocialAuth;
 
 use Illuminate\Support\ServiceProvider;
-use Learnwithfair\SocialAuth\Commands\InstallCommand;
+use RahatulRabbi\SocialAuth\Commands\InstallCommand;
 
 class SocialAuthServiceProvider extends ServiceProvider
 {

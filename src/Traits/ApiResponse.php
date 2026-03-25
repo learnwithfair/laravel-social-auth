@@ -1,5 +1,5 @@
 <?php
-namespace Learnwithfair\SocialAuth\Traits;
+namespace RahatulRabbi\SocialAuth\Traits;
 
 use Illuminate\Http\JsonResponse;
 

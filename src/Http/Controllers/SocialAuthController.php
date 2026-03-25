@@ -1,15 +1,15 @@
 <?php
-namespace Learnwithfair\SocialAuth\Http\Controllers;
+namespace RahatulRabbi\SocialAuth\Http\Controllers;
 
-use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\GoogleProvider;
-use Learnwithfair\SocialAuth\Traits\ApiResponse;
+use RahatulRabbi\SocialAuth\Traits\ApiResponse;
 use SocialiteProviders\Apple\Provider as AppleProvider;
 
 class SocialAuthController extends Controller
@@ -27,20 +27,15 @@ class SocialAuthController extends Controller
             'device'      => 'required|in:android,ios',
         ]);
 
-        $provider = $validated['provider'];
-        $token    = $validated['provider_id'];
-        $device   = $validated['device'];
-
         try {
-            $driver = $this->resolveDriver($provider, $device);
-
-            $socialiteUser = $driver->userFromToken($token);
+            $driver        = $this->resolveDriver($validated['provider'], $validated['device']);
+            $socialiteUser = $driver->userFromToken($validated['provider_id']);
 
             if (! $socialiteUser || ! $socialiteUser->getEmail()) {
                 return $this->error(null, 'Invalid social token or missing email.', 422);
             }
 
-            $user         = $this->findOrProvisionUser($socialiteUser, $provider);
+            $user         = $this->findOrProvisionUser($socialiteUser, $validated['provider']);
             $sanctumToken = $user->createToken('mobile')->plainTextToken;
 
             return $this->success([
@@ -61,8 +56,11 @@ class SocialAuthController extends Controller
     {
         $config = config("social-auth.providers.{$provider}.{$device}");
 
-        if (! $config) {
-            throw new \InvalidArgumentException("No configuration found for provider [{$provider}] on device [{$device}].");
+        if (! $config || empty($config['client_id'])) {
+            throw new \InvalidArgumentException(
+                "No configuration found for provider [{$provider}] on device [{$device}]. " .
+                "Check your social-auth.php config and .env credentials."
+            );
         }
 
         $providerClass = match ($provider) {
@@ -79,69 +77,115 @@ class SocialAuthController extends Controller
     }
 
     /**
-     * Find an existing user by email or create a new one.
+     * Find an existing user by email or create a new one, applying all
+     * configured field mappings from config/social-auth.php.
      */
-    protected function findOrProvisionUser(mixed $socialiteUser, string $provider): User
+    protected function findOrProvisionUser(mixed $socialiteUser, string $provider): mixed
     {
+        $userModel = config('social-auth.user_model', \App\Models\User::class);
+
         $email      = $socialiteUser->getEmail();
-        $name       = $socialiteUser->getName() ?? config('social-auth.defaults.name', 'Unknown User');
+        $fullName   = $socialiteUser->getName() ?? config('social-auth.defaults.name', 'Unknown User');
         $avatarUrl  = $socialiteUser->getAvatar();
         $providerId = $socialiteUser->getId();
 
-        $user = User::firstOrNew(['email' => $email]);
+        /** @var \Illuminate\Database\Eloquent\Model $user */
+        $user   = $userModel::firstOrNew(['email' => $email]);
+        $fields = [];
 
-        $avatarPath = $this->downloadAvatar($avatarUrl, $user->exists ? $user->avatar_path : null);
+        // Name field mapping
+        $fields = array_merge($fields, $this->resolveNameFields($fullName));
 
-        $freePlanId = $this->resolvePlanId();
+        // Username field mapping
+        if (config('social-auth.username.enabled', true)) {
+            $usernameColumn          = config('social-auth.username.column', 'username');
+            $fields[$usernameColumn] = $user->exists ? $user->{$usernameColumn} : $this->generateUniqueUsername($fullName, $userModel, $usernameColumn);
+        }
 
-        $user->fill([
-            'name'              => $name,
-            'username'          => $user->exists ? $user->username : $this->generateUniqueUsername($name),
-            'password'          => $user->exists ? $user->password : bcrypt(Str::random(32)),
-            'provider'          => $provider,
-            'provider_id'       => $providerId,
-            'avatar_path'       => $avatarPath ?: ($user->avatar_path ?? null),
-            'email_verified_at' => now(),
-            'plan_id'           => $user->exists ? $user->plan_id : $freePlanId,
-            'is_active'         => true,
-        ])->save();
+        $fields['password']          = $user->exists ? $user->password : bcrypt(Str::random(32));
+        $fields['provider']          = $provider;
+        $fields['provider_id']       = $providerId;
+        $fields['email_verified_at'] = now();
+
+        //  Active status field mapping
+        if (config('social-auth.active_status.enabled', true)) {
+            $statusColumn          = config('social-auth.active_status.column', 'is_active');
+            $fields[$statusColumn] = config('social-auth.active_status.value', true);
+        }
+
+        //  Avatar field mapping
+        if (config('social-auth.avatar.enabled', true)) {
+            $avatarColumn          = config('social-auth.avatar.column', 'avatar_path');
+            $existingAvatar        = $user->exists ? ($user->{$avatarColumn} ?? null) : null;
+            $downloadedPath        = $this->downloadAvatar($avatarUrl, $existingAvatar);
+            $fields[$avatarColumn] = $downloadedPath ?: $existingAvatar;
+        }
+
+        $user->fill($fields)->save();
 
         return $user;
     }
 
     /**
-     * Download and persist a remote avatar image.
+     * Resolve name fields based on the configured strategy.
      *
-     * Returns the local relative path on success, or null on failure.
+     * 'single' — writes full name to one column (e.g. name, full_name, display_name)
+     * 'split'  — splits full name across two columns (e.g. first_name / last_name)
+     */
+    protected function resolveNameFields(string $fullName): array
+    {
+        $strategy = config('social-auth.name_field.strategy', 'single');
+
+        if ($strategy === 'split') {
+            $parts     = explode(' ', trim($fullName), 2);
+            $firstName = $parts[0] ?? '';
+            $lastName  = $parts[1] ?? '';
+
+            return [
+                config('social-auth.name_field.first', 'first_name') => $firstName,
+                config('social-auth.name_field.last', 'last_name')   => $lastName,
+            ];
+        }
+
+        // Default: single column
+        return [config('social-auth.name_field.column', 'name') => $fullName];
+    }
+
+    /**
+     * Download a remote avatar image and persist it to the configured disk.
+     *
+     * Returns the stored path on success, or null on any failure.
      */
     protected function downloadAvatar(?string $url, ?string $existingPath): ?string
     {
-        if (! $url) {
-            return null;
-        }
+        if (! $url) {return null;}
 
         try {
-            if ($existingPath && function_exists('deleteFile')) {
-                deleteFile($existingPath);
-            }
-
             $response = Http::timeout(10)->get($url);
+            if (! $response->successful()) {return null;}
 
-            if (! $response->successful()) {
-                return null;
+            $disk   = config('social-auth.avatar.disk', 'local_public');
+            $folder = trim(config('social-auth.avatar.folder', 'uploads/profileImages'), '/');
+
+            // local_public: write directly to public_path() — no Storage disk needed
+            if ($disk === 'local_public') {
+                $this->deleteLocalAvatar($existingPath);
+
+                $directory = public_path($folder);
+                if (! is_dir($directory)) {mkdir($directory, 0755, true);}
+
+                $filename = time() . '_' . Str::random(8) . '.jpg';
+                file_put_contents($directory . '/' . $filename, $response->body());
+
+                return $folder . '/' . $filename;
             }
 
-            $folder = '/uploads/profileImages';
-            $path   = public_path($folder);
+            // Any configured Laravel Storage disk (public, s3, etc.)
+            $this->deleteStorageAvatar($existingPath, $disk);
+            $filename = $folder . '/' . time() . '_' . Str::random(8) . '.jpg';
+            Storage::disk($disk)->put($filename, $response->body());
 
-            if (! is_dir($path)) {
-                mkdir($path, 0755, true);
-            }
-
-            $filename = time() . '_' . Str::random(6) . '.jpg';
-            file_put_contents($path . '/' . $filename, $response->body());
-
-            return $folder . '/' . $filename;
+            return $filename;
 
         } catch (\Exception) {
             return null;
@@ -149,29 +193,37 @@ class SocialAuthController extends Controller
     }
 
     /**
-     * Resolve the ID of the free plan, if the Plan model exists.
+     * Delete a previously stored avatar from the public directory.
      */
-    protected function resolvePlanId(): ?int
+    protected function deleteLocalAvatar(?string $path): void
     {
-        $planModel = config('social-auth.plan_model');
+        if (! $path) {return;}
 
-        if ($planModel && class_exists($planModel)) {
-            return $planModel::where('slug', config('social-auth.free_plan_slug', 'free'))->value('id');
+        $fullPath = public_path(ltrim($path, '/'));
+        if (file_exists($fullPath)) {@unlink($fullPath);}
+    }
+
+    /**
+     * Delete a previously stored avatar from a Laravel Storage disk.
+     */
+    protected function deleteStorageAvatar(?string $path, string $disk): void
+    {
+        if ($path && Storage::disk($disk)->exists($path)) {
+            Storage::disk($disk)->delete($path);
         }
-
-        return null;
     }
 
     /**
      * Generate a URL-safe, unique username derived from the user's display name.
+     * Appends an incrementing numeric suffix until uniqueness is confirmed.
      */
-    protected function generateUniqueUsername(string $name): string
+    protected function generateUniqueUsername(string $name, string $userModel, string $column): string
     {
-        $base     = Str::slug($name, '_');
+        $base     = Str::slug($name, '_') ?: 'user';
         $username = $base;
         $i        = 1;
 
-        while (User::where('username', $username)->exists()) {
+        while ($userModel::where($column, $username)->exists()) {
             $username = $base . '_' . $i++;
         }
 

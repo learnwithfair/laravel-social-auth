@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Learnwithfair\SocialAuth\Http\Controllers\SocialAuthController;
+use RahatulRabbi\SocialAuth\Http\Controllers\SocialAuthController;
 
 if (config('social-auth.route.enabled', true)) {
     Route::prefix(config('social-auth.route.prefix', 'api'))

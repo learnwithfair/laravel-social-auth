@@ -1,6 +1,5 @@
 <?php
-
-namespace Learnwithfair\SocialAuth\Commands;
+namespace RahatulRabbi\SocialAuth\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -130,29 +129,52 @@ class InstallCommand extends Command
         $this->line('');
         $this->line('  Installation complete. Complete the following steps:');
         $this->line('');
+
         $this->line('  1. Set your credentials in .env:');
         $this->line('       CLIENT_ID_ANDROID=<your-android-client-id>');
         $this->line('       CLIENT_ID_IOS=<your-ios-client-id>');
         $this->line('');
-        $this->line('  2. Run the migration:');
+
+        $this->line('  2. Open config/social-auth.php and adjust field mappings');
+        $this->line('     to match your users table column names:');
+        $this->line('');
+        $this->line('       name_field   — strategy: single | split');
+        $this->line('                      column: name | full_name | display_name');
+        $this->line('                      first:  first_name | f_name');
+        $this->line('                      last:   last_name  | l_name');
+        $this->line('');
+        $this->line('       avatar       — enabled: true | false');
+        $this->line('                      column: avatar_path | avatar | image | profile_image');
+        $this->line('                      disk:   local_public | public | s3');
+        $this->line('');
+        $this->line('       username     — enabled: true | false');
+        $this->line('                      column: username | user_name | handle');
+        $this->line('');
+        $this->line('       active_status — enabled: true | false');
+        $this->line('                       column: is_active | status | active');
+        $this->line('');
+
+        $this->line('  3. Run the migration:');
         $this->line('       php artisan migrate');
         $this->line('');
-        $this->line('  3. Ensure Laravel Sanctum is installed and configured.');
+
+        $this->line('  4. Ensure Laravel Sanctum is installed and configured.');
         $this->line('');
 
         $laravelVersion = (int) app()->version();
 
         if ($laravelVersion < 11) {
-            $this->line('  4. (Laravel 10 only) Register the SocialiteProviders event listener');
+            $this->line('  5. (Laravel 10 only) Register the SocialiteProviders event listener');
             $this->line('     in App\\Providers\\AppServiceProvider — see README for the code.');
         } else {
-            $this->line('  4. (Laravel 11+) No event listener registration required.');
+            $this->line('  5. (Laravel 11+) No event listener registration required.');
             $this->line('     SocialiteProviders v5+ registers itself automatically.');
         }
 
         $this->line('');
-        $this->line('  5. Add the route to routes/api.php or use the package route');
-        $this->line('     that is loaded automatically at POST /api/social-login.');
+        $this->line('  6. The route is registered automatically at:');
+        $this->line('       POST /api/social-login');
+        $this->line('     To customise or disable it, edit config/social-auth.php > route.');
         $this->line('');
     }
 }

@@ -1,8 +1,8 @@
 <?php
 
-namespace Learnwithfair\SocialAuth\Tests\Feature;
+namespace RahatulRabbi\SocialAuth\Tests\Feature;
 
-use Learnwithfair\SocialAuth\Tests\TestCase;
+use RahatulRabbi\SocialAuth\Tests\TestCase;
 
 class InstallCommandTest extends TestCase
 {
