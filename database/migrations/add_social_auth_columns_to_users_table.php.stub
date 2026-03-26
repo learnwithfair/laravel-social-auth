@@ -22,8 +22,16 @@ return new class extends Migration
             // Provider fields — always required regardless of any config toggle
             // ------------------------------------------------------------------
 
+            if (! Schema::hasColumn('users', 'email')) {
+                $table->string('email')->unique();
+            }
+
+            if (! Schema::hasColumn('users', 'password')) {
+                $table->string('password')->after('email');
+            }
+
             if (! Schema::hasColumn('users', 'provider')) {
-                $table->string('provider')->nullable()->after('email');
+                $table->string('provider')->nullable()->after('password');
             }
 
             if (! Schema::hasColumn('users', 'provider_id')) {
@@ -72,7 +80,7 @@ return new class extends Migration
                 $usernameCol = config('social-auth.username.column', 'username');
 
                 if (! Schema::hasColumn('users', $usernameCol)) {
-                    $table->string($usernameCol)->nullable()->unique()->after('name');
+                    $table->string($usernameCol)->nullable()->unique()->after('email');
                 }
             }
 
@@ -91,6 +99,20 @@ return new class extends Migration
             }
 
             // ------------------------------------------------------------------
+            // role field
+            // Reads: social-auth.role.enabled
+            //        social-auth.role.column
+            // ------------------------------------------------------------------
+
+            if (config('social-auth.role.enabled', true)) {
+                $roleCol = config('social-auth.role.column', 'role');
+
+                if (! Schema::hasColumn('users', $roleCol)) {
+                    $table->string($roleCol)->nullable()->after('password');
+                }
+            }
+
+            // ------------------------------------------------------------------
             // Active status field
             // Reads: social-auth.active_status.enabled
             //        social-auth.active_status.column
@@ -104,8 +126,12 @@ return new class extends Migration
                 if (! Schema::hasColumn('users', $activeCol)) {
                     $table->boolean($activeCol)->default($activeValue ? 1 : 0)->after('provider_id');
                 }
-            }           
+            }  
 
+            if (! Schema::hasColumn('users', 'email_verified_at')) {
+                $table->timestamp('email_verified_at')->nullable()->after('provider_id');
+            }
+                     
         });
     }
 
@@ -130,6 +156,10 @@ return new class extends Migration
 
             if (config('social-auth.username.enabled', true)) {
                 $columns[] = config('social-auth.username.column', 'username');
+            }
+
+            if (config('social-auth.role.enabled', true)) {
+                $columns[] = config('social-auth.role.column', 'role');
             }
 
             if (config('social-auth.avatar.enabled', true)) {

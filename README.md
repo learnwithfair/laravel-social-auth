@@ -78,6 +78,7 @@ Open the published config and adjust every section to match your actual `users` 
     'column'  => 'is_active', // e.g. 'is_active', 'status', 'active'
     'value'   => true,
 ],
+
 ```
 
 **Step 5 — Run the migration:**
@@ -207,32 +208,88 @@ Rate limited to 5 requests per minute by default. The route prefix, path, middle
 
 ## Field Mapping Reference
 
-All field mappings are controlled from `config/social-auth.php`. The migration and the controller both read this config at runtime, so the two are always in sync.
+All field mappings are controlled from `config/social-auth.php`. The migration and the controller both read this config at runtime, so they are always in sync.
 
 ### Name Strategy
 
-| Strategy | Config keys used          | Example columns               |
-|----------|---------------------------|-------------------------------|
-| single   | `name_field.column`       | name, full_name, display_name |
-| split    | `name_field.first` + `last` | first_name / last_name, f_name / l_name |
+| Strategy | Config keys used | Example columns |
+|----------|-----------------|-----------------|
+| single | `name_field.column` | name, full_name, display_name |
+| split | `name_field.first` + `last` | first_name / last_name, f_name / l_name |
 
 ### Avatar Storage Disk
 
-| Disk value    | Where files are saved                              |
-|---------------|----------------------------------------------------|
-| local_public  | `public_path(folder)` — no Storage config needed  |
-| public        | `storage/app/public/` via Laravel Storage          |
-| s3            | AWS S3 via Laravel Storage                         |
-| any disk key  | Any disk defined in `config/filesystems.php`       |
+| Disk value | Where files are saved |
+|---|---|
+| local_public | `public_path(folder)` — no Storage config needed |
+| public | `storage/app/public/` via Laravel Storage |
+| s3 | AWS S3 via Laravel Storage |
+| any disk key | Any disk defined in `config/filesystems.php` |
 
-### Quick Reference
+### Feature Toggle Quick Reference
 
-| Feature       | Config key                  | Disable by setting         |
-|---------------|-----------------------------|----------------------------|
-| Username      | `username.enabled`          | `false`                    |
-| Avatar        | `avatar.enabled`            | `false`                    |
-| Active status | `active_status.enabled`     | `false`                    |
-| Plan          | `plan.model`                | `null`                     |
+| Feature | Config key | Disable by setting |
+|---|---|---|
+| Username | `username.enabled` | `false` |
+| Avatar | `avatar.enabled` | `false` |
+| Active status | `active_status.enabled` | `false` |
+| Role | `role.enabled` | `false` |
+---
+
+## Role Handling
+
+If your application has multiple user types (e.g. `user`, `instructor`, `admin`), enable role handling in `config/social-auth.php`:
+
+```php
+'role' => [
+    'enabled'       => true,
+    'request_field' => 'role',                 // the key sent by the mobile client
+    'column'        => 'role',                 // the column on your users table
+    'allowed'       => ['user', 'instructor'], // leave empty [] to allow any string
+    'default'       => 'user',                 // used when no role is sent
+],
+```
+
+Both `request_field` and `column` are independently configurable. For example, if the mobile client sends `user_type` but your column is named `role`:
+
+```php
+'request_field' => 'user_type',  // mobile sends: { "user_type": "instructor" }
+'column'        => 'role',       // written to: users.role
+```
+
+The request payload with role enabled:
+
+```json
+{
+  "provider": "google",
+  "provider_id": "ya29.a0AfH6SMDxxxxxxxx",
+  "device": "android",
+  "role": "instructor"
+}
+```
+
+Behaviour:
+
+- If the role value is not in `allowed`, the request is rejected with a `422` validation error.
+- If no role is sent, the `default` value is used.
+- Leave `allowed` as an empty array `[]` to accept any string value without restriction.
+- The role is only written when a **new** user is created. Returning users always keep their existing role — the request value is ignored for them.
+
+---
+
+## Mass Assignment Handling
+
+Laravel models that use `$fillable` will silently ignore any columns not listed in that array. Because the package writes dynamic column names (configured by you), those columns are often absent from `$fillable`.
+
+The package handles this automatically. The behaviour is controlled by `config('social-auth.mass_assignment')`:
+
+| Value | Behaviour |
+|---|---|
+| `auto` (default) | Inspects the model at runtime. If `$fillable` is used, the package fields missing from it are temporarily added for that single save and then removed. If `$guarded` is used, writes directly. No changes to your model required. |
+| `bypass` | Always uses `forceFill()`. Bypasses all mass assignment protection. |
+| `strict` | Uses `fill()` only. Relies entirely on what your model declares. You must add the package columns to `$fillable` yourself. |
+
+With the default `auto` setting, you do **not** need to touch your User model's `$fillable` or `$guarded` array. The package detects which guard strategy your model uses and adapts accordingly.
 
 ---
 
@@ -248,9 +305,9 @@ use RahatulRabbi\SocialAuth\Http\Controllers\SocialAuthController as BaseSocialA
 class SocialAuthController extends BaseSocialAuthController
 {
     // Example: assign a referral code to new users
-    protected function findOrProvisionUser(mixed $socialiteUser, string $provider): mixed
+    protected function findOrProvisionUser(mixed $socialiteUser, string $provider, ?string $role = null): mixed
     {
-        $user = parent::findOrProvisionUser($socialiteUser, $provider);
+        $user = parent::findOrProvisionUser($socialiteUser, $provider, $role);
 
         if ($user->wasRecentlyCreated) {
             $user->referral_code = \Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(8));
@@ -264,14 +321,16 @@ class SocialAuthController extends BaseSocialAuthController
 
 **Available override points:**
 
-| Method                     | Purpose                                               |
-|----------------------------|-------------------------------------------------------|
-| `resolveDriver`            | Change how the Socialite driver is built              |
-| `findOrProvisionUser`      | Customise user creation and update logic              |
-| `resolveNameFields`        | Override name splitting beyond what config supports   |
-| `resolvePlanFields`        | Customise plan assignment for new users               |
-| `downloadAvatar`           | Replace the avatar download and storage strategy      |
-| `generateUniqueUsername`   | Change the username generation algorithm              |
+| Method | Purpose |
+|---|---|
+| `validationRules` | Add or modify request validation rules |
+| `resolveDriver` | Change how the Socialite driver is built |
+| `findOrProvisionUser` | Customise user creation and update logic |
+| `resolveRoleFields` | Override how the role value is extracted and written |
+| `resolveNameFields` | Override name splitting beyond what config supports |
+| `fillAndSave` | Override the entire mass assignment handling strategy |
+| `downloadAvatar` | Replace the avatar download and storage strategy |
+| `generateUniqueUsername` | Change the username generation algorithm |
 
 ---
 

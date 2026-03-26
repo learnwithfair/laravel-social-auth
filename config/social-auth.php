@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'providers'     => [
+    'providers'       => [
 
         'google' => [
             'android' => [
@@ -54,7 +54,7 @@ return [
     |
     */
 
-    'route'         => [
+    'route'           => [
         'enabled'    => true,
         'prefix'     => 'api',
         'path'       => 'social-login',
@@ -71,14 +71,12 @@ return [
     |
     */
 
-    'user_model'    => \App\Models\User::class,
+    'user_model'      => \App\Models\User::class,
 
     /*
     |--------------------------------------------------------------------------
     | Field Mapping — Name
     |--------------------------------------------------------------------------
-    |
-    | Tell the package which column(s) on your users table hold the user's name.
     |
     | Supported strategies:
     |
@@ -93,7 +91,7 @@ return [
     |
     */
 
-    'name_field'    => [
+    'name_field'      => [
         'strategy' => 'single',     // 'single' | 'split'
         'column'   => 'name',       // used when strategy = 'single'
         'first'    => 'first_name', // used when strategy = 'split'
@@ -105,23 +103,14 @@ return [
     | Field Mapping — Avatar
     |--------------------------------------------------------------------------
     |
-    | Tell the package which column stores the avatar path, and where on disk
-    | the downloaded image should be saved.
-    |
-    | Set "column" to match your users table:
-    |   e.g. "avatar", "avatar_path", "image", "profile_image", "user_image"
-    |
-    | Set "disk" to any Laravel filesystem disk defined in config/filesystems.php.
-    | Use "local_public" (default) to store under the public/ directory via
-    | public_path(), which does not require Laravel Storage configuration.
-    |
-    | "folder" is the subdirectory within the disk root where files are saved.
-    |
     | Set "enabled" to false to skip avatar download entirely.
+    | Set "column" to match your users table column name.
+    | Set "disk" to any Laravel filesystem disk, or "local_public" to write
+    |   directly under public_path() without requiring Storage configuration.
     |
     */
 
-    'avatar'        => [
+    'avatar'          => [
         'enabled' => true,
         'column'  => 'avatar_path',  // e.g. 'avatar', 'image', 'profile_image', 'user_image'
         'disk'    => 'local_public', // 'local_public' | any Laravel disk key
@@ -133,19 +122,16 @@ return [
     | Field Mapping — Username
     |--------------------------------------------------------------------------
     |
-    | Set "enabled" to true if your users table has a username column.
-    | Set "column" to match your actual column name.
+    | Set "enabled" to false to skip username handling entirely.
+    | Set "column" to match your users table column name.
     |
-    | The package will auto-generate a unique URL-safe username derived from
-    | the user's display name, appending a numeric suffix when needed.
-    |
-    | Set "enabled" to false to skip username handling entirely — no column
-    | will be written and no uniqueness check will be performed.
+    | The package auto-generates a unique URL-safe username derived from the
+    | user's display name, appending a numeric suffix when needed.
     |
     */
 
-    'username'      => [
-        'enabled' => true,
+    'username'        => [
+        'enabled' => false, // enable or disable username handling
         'column'  => 'username', // e.g. 'username', 'user_name', 'handle'
     ],
 
@@ -154,16 +140,78 @@ return [
     | Field Mapping — Active Status
     |--------------------------------------------------------------------------
     |
-    | Set "enabled" to true if your users table has an active status column.
-    | "value" is what gets written when a user is created or logs in.
+    | Set "enabled" to false to skip this field entirely.
+    | Set "column" to match your users table column name.
+    | Set "value" to what should be written on create and login.
     |
     */
 
-    'active_status' => [
-        'enabled' => true,
+    'active_status'   => [
+        'enabled' => false, // enable or disable active status handling
         'column'  => 'is_active', // e.g. 'is_active', 'status', 'active'
         'value'   => true,
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Field Mapping — Role
+    |--------------------------------------------------------------------------
+    |
+    | Enable this if your application supports multiple user types.
+    |
+    | "enabled"       — Set to true to accept and write a role value.
+    |
+    | "request_field" — The key the mobile client sends in the JSON payload.
+    |                   e.g. if the app sends { "user_type": "instructor" }
+    |                   set this to "user_type". Defaults to "role".
+    |
+    | "column"        — The column on your users table that stores the role.
+    |                   e.g. "role", "user_type", "type", "user_role"
+    |
+    | "allowed"       — The values the API will accept. Any value outside this
+    |                   list is rejected with a 422 validation error.
+    |                   Leave empty ([]) to allow any string value.
+    |
+    | "default"       — The value written when the request sends no role field.
+    |
+    | Note: The role is only written for NEW users. Returning users always
+    |       retain their existing role — the request value is ignored for them.
+    |
+    */
+
+    'role'            => [
+        'enabled'       => false,
+        'request_field' => 'role',                 // key sent by the mobile client
+        'column'        => 'role',                 // e.g. 'role', 'user_type', 'type'
+        'allowed'       => ['user', 'instructor'], // leave empty [] to allow any string
+        'default'       => 'user',
+    ],
+  
+
+    /*
+    |--------------------------------------------------------------------------
+    | Mass Assignment Protection
+    |--------------------------------------------------------------------------
+    |
+    | Laravel models that use $fillable will silently ignore columns not listed
+    | in that array. Since the package writes dynamic column names configured
+    | by you, those columns are often absent from $fillable.
+    |
+    | 'auto'   — (recommended) Inspects the model at runtime.
+    |              - If $fillable is used: package fields missing from it are
+    |                temporarily added for that single save, then discarded.
+    |                No changes to your User model are required.
+    |              - If $guarded is used: writes directly.
+    |
+    | 'bypass' — Always uses forceFill(). Bypasses all protection.
+    |
+    | 'strict' — Uses fill() only. You must add every package column to your
+    |            model's $fillable array manually.
+    |
+    */
+
+    'mass_assignment' => 'auto', // 'auto' | 'bypass' | 'strict'
+
     /*
     |--------------------------------------------------------------------------
     | Defaults
@@ -173,7 +221,7 @@ return [
     |
     */
 
-    'defaults'      => [
+    'defaults'        => [
         'name' => 'Unknown User',
     ],
 
