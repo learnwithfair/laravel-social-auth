@@ -162,6 +162,18 @@ git tag v1.0.1
 git push origin main --tags
 ```
 
+
+git add .
+git commit -m "feat: v1.0.6 - update version"
+
+# 4. Git tag 
+git tag v1.0.6
+
+# 5. Push 
+git push origin main
+git push origin v1.0.6
+```
+
 Packagist will detect the new tag via the webhook and update automatically.
 
 ---
